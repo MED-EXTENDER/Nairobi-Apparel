@@ -20,19 +20,17 @@ export default function Checkout() {
     e.preventDefault();
     setStep("paystack");
 
-    // Simulate Paystack opening and processing
-    setTimeout(async () => {
-      try {
-        await createOrder({
-          items: items.map(i => ({ productId: i.product.id, quantity: i.quantity }))
-        });
-        clearCart();
-        setStep("success");
-      } catch (err) {
-        alert("Checkout failed. Make sure you are logged in.");
-        setStep("form");
-      }
-    }, 3000);
+    try {
+      const { paymentUrl } = await createOrder({
+        items: items.map(i => ({ productId: i.product.id, quantity: i.quantity }))
+      });
+
+      // Redirect to Paystack checkout page
+      window.location.href = paymentUrl;
+    } catch (err) {
+      alert("Checkout failed. Make sure you are logged in.");
+      setStep("form");
+    }
   };
 
   if (step === "paystack") {
@@ -41,7 +39,7 @@ export default function Checkout() {
         <div className="w-full max-w-md bg-card rounded-3xl p-10 border border-border shadow-2xl text-center space-y-6">
           <div className="w-16 h-16 border-4 border-t-primary border-r-primary border-b-border border-l-border rounded-full animate-spin mx-auto"></div>
           <h2 className="text-2xl font-bold">Connecting to Paystack...</h2>
-          <p className="text-muted-foreground">Please do not close this window.</p>
+          <p className="text-muted-foreground">You will be redirected shortly.</p>
           <div className="p-4 bg-muted rounded-xl text-sm font-mono">
             Amount to pay: KSh {total().toLocaleString()}
           </div>
