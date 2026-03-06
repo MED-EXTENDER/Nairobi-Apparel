@@ -1,0 +1,171 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400&family=Roboto:wght@300;400;500;700&family=Space+Grotesk:wght@300;400;500;600;700&family=Comic+Neue:wght@400;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* Default: Sunset Theme (Light) */
+    --background: 30 50% 98%;
+    --foreground: 20 50% 10%;
+    
+    --card: 0 0% 100%;
+    --card-foreground: 20 50% 10%;
+    
+    --popover: 0 0% 100%;
+    --popover-foreground: 20 50% 10%;
+    
+    --primary: 15 90% 55%;
+    --primary-foreground: 0 0% 100%;
+    
+    --secondary: 30 30% 90%;
+    --secondary-foreground: 15 90% 30%;
+    
+    --muted: 30 20% 92%;
+    --muted-foreground: 30 10% 40%;
+    
+    --accent: 40 90% 60%;
+    --accent-foreground: 20 50% 10%;
+    
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+    
+    --border: 30 20% 85%;
+    --input: 30 20% 85%;
+    --ring: 15 90% 55%;
+    
+    --radius: 0.75rem;
+    --font-sans: 'Inter', sans-serif;
+  }
+
+  .dark {
+    /* Default: Sunset Theme (Dark) */
+    --background: 20 40% 5%;
+    --foreground: 30 20% 90%;
+    
+    --card: 20 30% 8%;
+    --card-foreground: 30 20% 90%;
+    
+    --popover: 20 30% 8%;
+    --popover-foreground: 30 20% 90%;
+    
+    --primary: 15 80% 60%;
+    --primary-foreground: 0 0% 100%;
+    
+    --secondary: 20 30% 15%;
+    --secondary-foreground: 30 20% 90%;
+    
+    --muted: 20 20% 15%;
+    --muted-foreground: 30 10% 60%;
+    
+    --accent: 40 80% 50%;
+    --accent-foreground: 20 40% 5%;
+    
+    --destructive: 0 62% 30%;
+    --destructive-foreground: 0 0% 100%;
+    
+    --border: 20 20% 15%;
+    --input: 20 20% 15%;
+    --ring: 15 80% 60%;
+  }
+
+  /* OCEAN THEME */
+  :root[data-theme="ocean"] {
+    --primary: 210 90% 50%;
+    --primary-foreground: 0 0% 100%;
+    --background: 210 40% 98%;
+    --foreground: 210 50% 10%;
+    --accent: 190 90% 50%;
+    --ring: 210 90% 50%;
+  }
+  :root[data-theme="ocean"].dark {
+    --background: 210 40% 5%;
+    --foreground: 210 20% 90%;
+    --primary: 210 80% 60%;
+    --card: 210 30% 8%;
+  }
+
+  /* FOREST THEME */
+  :root[data-theme="forest"] {
+    --primary: 140 60% 40%;
+    --background: 140 30% 98%;
+    --foreground: 140 50% 10%;
+    --accent: 120 60% 45%;
+    --ring: 140 60% 40%;
+  }
+  :root[data-theme="forest"].dark {
+    --background: 140 40% 5%;
+    --foreground: 140 20% 90%;
+    --primary: 140 50% 50%;
+    --card: 140 30% 8%;
+  }
+
+  /* MIDNIGHT THEME */
+  :root[data-theme="midnight"] {
+    --primary: 260 80% 60%;
+    --background: 240 20% 98%;
+    --foreground: 240 50% 10%;
+    --accent: 280 80% 60%;
+    --ring: 260 80% 60%;
+  }
+  :root[data-theme="midnight"].dark {
+    --background: 240 40% 5%;
+    --foreground: 240 20% 90%;
+    --primary: 260 70% 65%;
+    --card: 240 30% 8%;
+  }
+
+  /* AMETHYST THEME */
+  :root[data-theme="amethyst"] {
+    --primary: 280 70% 50%;
+    --background: 280 30% 98%;
+    --foreground: 280 50% 10%;
+    --accent: 300 70% 50%;
+    --ring: 280 70% 50%;
+  }
+  :root[data-theme="amethyst"].dark {
+    --background: 280 40% 5%;
+    --foreground: 280 20% 90%;
+    --primary: 280 60% 60%;
+    --card: 280 30% 8%;
+  }
+
+  /* MONOCHROME THEME */
+  :root[data-theme="monochrome"] {
+    --primary: 0 0% 20%;
+    --background: 0 0% 98%;
+    --foreground: 0 0% 10%;
+    --accent: 0 0% 40%;
+    --ring: 0 0% 20%;
+  }
+  :root[data-theme="monochrome"].dark {
+    --background: 0 0% 5%;
+    --foreground: 0 0% 90%;
+    --primary: 0 0% 80%;
+    --card: 0 0% 8%;
+  }
+
+  /* FONTS */
+  :root[data-font="inter"] { --font-sans: 'Inter', sans-serif; }
+  :root[data-font="roboto"] { --font-sans: 'Roboto', sans-serif; }
+  :root[data-font="playfair"] { --font-sans: 'Playfair Display', serif; }
+  :root[data-font="space"] { --font-sans: 'Space Grotesk', sans-serif; }
+  :root[data-font="comic"] { --font-sans: 'Comic Neue', cursive; }
+
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground antialiased transition-colors duration-300;
+    font-family: var(--font-sans);
+  }
+  h1, h2, h3, h4, h5, h6 {
+    font-family: var(--font-sans);
+    @apply font-bold tracking-tight;
+  }
+}
+
+.glass-panel {
+  @apply bg-card/80 backdrop-blur-xl border border-border/50 shadow-xl shadow-black/5;
+}
