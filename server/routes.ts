@@ -5,7 +5,6 @@ import { api } from "@shared/routes";
 import { z } from "zod";
 import session from "express-session";
 import MemoryStoreSession from "memorystore";
-import fetch from "node-fetch"; // Needed for Paystack API calls
 
 declare module 'express-session' {
   interface SessionData {
@@ -121,7 +120,6 @@ export async function registerRoutes(
     res.json(filteredOrders);
   });
 
-  // Updated: Create order with real Paystack integration
   app.post(api.orders.create.path, async (req, res) => {
     try {
       const { items } = api.orders.create.input.parse(req.body);
@@ -146,7 +144,7 @@ export async function registerRoutes(
         paymentReference: `PAY-${Date.now()}`
       }, orderItemsToInsert);
 
-      // Call Paystack Initialize Transaction API
+      // Node 18+ global fetch (no node-fetch needed)
       const response = await fetch("https://api.paystack.co/transaction/initialize", {
         method: "POST",
         headers: {
@@ -155,7 +153,7 @@ export async function registerRoutes(
         },
         body: JSON.stringify({
           email: (await storage.getUser(req.session.userId)).email,
-          amount: totalAmount * 100, // Paystack expects kobo
+          amount: totalAmount * 100,
           reference: order.paymentReference,
           callback_url: `${process.env.APP_URL}/checkout/callback`
         })
