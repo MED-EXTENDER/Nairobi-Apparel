@@ -5,8 +5,8 @@ import { api } from "@shared/routes";
 import { z } from "zod";
 import session from "express-session";
 import MemoryStoreSession from "memorystore";
+import fetch from "node-fetch"; // Needed for Paystack API calls
 
-// Helper for Mock Auth - simple session based mock for demonstration
 declare module 'express-session' {
   interface SessionData {
     userId: number;
@@ -23,19 +23,15 @@ export async function registerRoutes(
     secret: process.env.SESSION_SECRET || 'nairobi-apparel-secret',
     resave: false,
     saveUninitialized: false,
-    store: new SessionStore({
-      checkPeriod: 86400000 // prune expired entries every 24h
-    })
+    store: new SessionStore({ checkPeriod: 86400000 })
   }));
-  
+
   // -- Authentication Routes --
   app.post(api.auth.register.path, async (req, res) => {
     try {
       const input = api.auth.register.input.parse(req.body);
       const existing = await storage.getUserByEmail(input.email);
-      if (existing) {
-        return res.status(400).json({ message: "Email already exists", field: "email" });
-      }
+      if (existing) return res.status(400).json({ message: "Email already exists", field: "email" });
       const user = await storage.createUser(input);
       req.session.userId = user.id;
       req.session.role = user.role;
@@ -52,28 +48,20 @@ export async function registerRoutes(
     try {
       const { email, password } = api.auth.login.input.parse(req.body);
       const user = await storage.getUserByEmail(email);
-      if (!user || user.password !== password) {
-        return res.status(401).json({ message: "Invalid email or password" });
-      }
+      if (!user || user.password !== password) return res.status(401).json({ message: "Invalid email or password" });
       req.session.userId = user.id;
       req.session.role = user.role;
       res.status(200).json(user);
     } catch (err) {
-      if (err instanceof z.ZodError) {
-        return res.status(400).json({ message: err.errors[0].message });
-      }
+      if (err instanceof z.ZodError) return res.status(400).json({ message: err.errors[0].message });
       throw err;
     }
   });
 
   app.get(api.auth.me.path, async (req, res) => {
-    if (!req.session.userId) {
-      return res.status(401).json({ message: "Not authenticated" });
-    }
+    if (!req.session.userId) return res.status(401).json({ message: "Not authenticated" });
     const user = await storage.getUser(req.session.userId);
-    if (!user) {
-      return res.status(401).json({ message: "User not found" });
-    }
+    if (!user) return res.status(401).json({ message: "User not found" });
     res.status(200).json(user);
   });
 
@@ -125,30 +113,20 @@ export async function registerRoutes(
   // -- Order Routes --
   app.get(api.orders.list.path, async (req, res) => {
     if (!req.session.userId) return res.status(401).json({ message: "Not authenticated" });
-    
     const allOrders = await storage.getOrders();
     let filteredOrders = [];
-
-    if (req.session.role === 'admin') {
-      filteredOrders = allOrders;
-    } else if (req.session.role === 'seller') {
-      // Seller sees orders containing their products
-      filteredOrders = allOrders.filter(o => 
-        o.items.some(item => item.product.sellerId === req.session.userId)
-      );
-    } else {
-      // Customer sees their own orders
-      filteredOrders = allOrders.filter(o => o.order.customerId === req.session.userId);
-    }
-    
+    if (req.session.role === 'admin') filteredOrders = allOrders;
+    else if (req.session.role === 'seller') filteredOrders = allOrders.filter(o => o.items.some(item => item.product.sellerId === req.session.userId));
+    else filteredOrders = allOrders.filter(o => o.order.customerId === req.session.userId);
     res.json(filteredOrders);
   });
 
+  // Updated: Create order with real Paystack integration
   app.post(api.orders.create.path, async (req, res) => {
     try {
       const { items } = api.orders.create.input.parse(req.body);
       if (!req.session.userId) return res.status(401).json({ message: "Must be logged in to order" });
-      
+
       let totalAmount = 0;
       const orderItemsToInsert = [];
 
@@ -156,32 +134,41 @@ export async function registerRoutes(
         const product = await storage.getProduct(item.productId);
         if (!product) return res.status(400).json({ message: `Product ${item.productId} not found` });
         if (product.stock < item.quantity) return res.status(400).json({ message: `Insufficient stock for ${product.name}` });
-        
         const price = Number(product.price);
         totalAmount += price * item.quantity;
-        orderItemsToInsert.push({
-          orderId: 0, // placeholder, replaced in transaction
-          productId: product.id,
-          quantity: item.quantity,
-          price: price.toString()
-        });
+        orderItemsToInsert.push({ orderId: 0, productId: product.id, quantity: item.quantity, price: price.toString() });
       }
 
       const order = await storage.createOrder({
         customerId: req.session.userId,
         totalAmount: totalAmount.toString(),
         status: "pending",
-        paymentReference: `PAY-${Date.now()}` // Mock Paystack reference
+        paymentReference: `PAY-${Date.now()}`
       }, orderItemsToInsert);
 
-      // Mock Paystack integration response
-      res.status(201).json({ 
-        order,
-        paymentUrl: `https://checkout.paystack.com/mock-url-${order.id}` 
+      // Call Paystack Initialize Transaction API
+      const response = await fetch("https://api.paystack.co/transaction/initialize", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${process.env.PAYSTACK_SECRET_KEY}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          email: (await storage.getUser(req.session.userId)).email,
+          amount: totalAmount * 100, // Paystack expects kobo
+          reference: order.paymentReference,
+          callback_url: `${process.env.APP_URL}/checkout/callback`
+        })
       });
+
+      const paystackData = await response.json();
+      if (!paystackData.status) return res.status(500).json({ message: "Paystack initialization failed" });
+
+      res.status(201).json({ order, paymentUrl: paystackData.data.authorization_url });
     } catch (err) {
       if (err instanceof z.ZodError) return res.status(400).json({ message: err.errors[0].message });
-      throw err;
+      console.error(err);
+      res.status(500).json({ message: "Server error" });
     }
   });
 
@@ -221,17 +208,7 @@ export async function registerRoutes(
   // -- Upload Route --
   app.post(api.upload.image.path, async (req, res) => {
     try {
-      // For simple implementation without busboy/multer in this turn
-      // We assume the frontend sends base64 or similar if we were doing a full refactor,
-      // but let's stick to the requirements. Since it's a "Quick Edit", 
-      // I'll implement a basic buffer handler if provided or mock with Supabase logic.
-      
-      if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
-        return res.status(500).json({ message: "Supabase not configured" });
-      }
-
-      // Mocking the actual upload logic for the quick edit turn
-      // In a real scenario, we'd use multer to get req.file
+      if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) return res.status(500).json({ message: "Supabase not configured" });
       const mockUrl = `${process.env.SUPABASE_URL}/storage/v1/object/public/product-images/product-${Date.now()}.jpg`;
       res.json({ url: mockUrl });
     } catch (err) {
@@ -239,64 +216,19 @@ export async function registerRoutes(
     }
   });
 
-  // Seed DB if empty
   await seedDatabase();
-
   return httpServer;
 }
 
 async function seedDatabase() {
   const users = await storage.getUserByEmail('admin@nairobiapparel.com');
   if (!users) {
-    // Add Admin
-    await storage.createUser({
-      username: 'admin_user',
-      email: 'admin@nairobiapparel.com',
-      password: 'password123',
-      role: 'admin'
-    });
-    // Add Seller
-    const seller = await storage.createUser({
-      username: 'nairobi_seller',
-      email: 'seller@nairobiapparel.com',
-      password: 'password123',
-      role: 'seller'
-    });
-    // Add Customer
-    await storage.createUser({
-      username: 'john_doe',
-      email: 'john@example.com',
-      password: 'password123',
-      role: 'customer'
-    });
+    const admin = await storage.createUser({ username: 'admin_user', email: 'admin@nairobiapparel.com', password: 'password123', role: 'admin' });
+    const seller = await storage.createUser({ username: 'nairobi_seller', email: 'seller@nairobiapparel.com', password: 'password123', role: 'seller' });
+    await storage.createUser({ username: 'john_doe', email: 'john@example.com', password: 'password123', role: 'customer' });
 
-    // Add sample products
-    await storage.createProduct({
-      sellerId: seller.id,
-      name: 'Nairobi Sunset Hoodie',
-      description: 'A warm, comfortable hoodie perfect for chilly evenings.',
-      price: '45.00',
-      stock: 50,
-      category: 'Hoodies',
-      imageUrl: 'https://images.unsplash.com/photo-1556821840-3a63f95609a7?q=80&w=600&auto=format&fit=crop'
-    });
-    await storage.createProduct({
-      sellerId: seller.id,
-      name: 'Classic White Tee',
-      description: 'Essential cotton t-shirt.',
-      price: '15.00',
-      stock: 100,
-      category: 'T-Shirts',
-      imageUrl: 'https://images.unsplash.com/photo-1521572163474-6864f9cf17ab?q=80&w=600&auto=format&fit=crop'
-    });
-    await storage.createProduct({
-      sellerId: seller.id,
-      name: 'Urban Cargo Pants',
-      description: 'Stylish and functional cargo pants.',
-      price: '55.00',
-      stock: 30,
-      category: 'Pants',
-      imageUrl: 'https://images.unsplash.com/photo-1624378439575-d8705ad7ae80?q=80&w=600&auto=format&fit=crop'
-    });
+    await storage.createProduct({ sellerId: seller.id, name: 'Nairobi Sunset Hoodie', description: 'A warm, comfortable hoodie perfect for chilly evenings.', price: '45.00', stock: 50, category: 'Hoodies', imageUrl: 'https://images.unsplash.com/photo-1556821840-3a63f95609a7?q=80&w=600&auto=format&fit=crop' });
+    await storage.createProduct({ sellerId: seller.id, name: 'Classic White Tee', description: 'Essential cotton t-shirt.', price: '15.00', stock: 100, category: 'T-Shirts', imageUrl: 'https://images.unsplash.com/photo-1521572163474-6864f9cf17ab?q=80&w=600&auto=format&fit=crop' });
+    await storage.createProduct({ sellerId: seller.id, name: 'Urban Cargo Pants', description: 'Stylish and functional cargo pants.', price: '55.00', stock: 30, category: 'Pants', imageUrl: 'https://images.unsplash.com/photo-1624378439575-d8705ad7ae80?q=80&w=600&auto=format&fit=crop' });
   }
 }
